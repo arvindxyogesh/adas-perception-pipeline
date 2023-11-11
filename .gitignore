@@ -1,0 +1,36 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# OS/editor files
+.DS_Store
+.vscode/
+
+# Logs and temporary outputs
+*.log
+tmp/
+
+# Large/local datasets and downloaded archives
+datasets/**
+!datasets/
+!datasets/README.md
+!datasets/DOWNLOADED_FROM.txt
+
+# Local benchmark/result artifacts (keep directory structure optional)
+results/*.json
+
+# LaTeX build artifacts
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.fls
+report/*.fdb_latexmk
+
+# Spark checkpoints
+spark_app/checkpoints/
+/tmp/spark-checkpoints/
