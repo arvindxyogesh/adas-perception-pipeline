@@ -1,0 +1,21 @@
+kafka:
+  bootstrap_servers: kafka:9092
+  raw_topic: raw_frames
+  detections_topic: detections
+
+producer:
+  video_source: /app/datasets/sample_drive.mp4
+  camera_id: front_center
+  target_fps: 20
+
+inference:
+  url: http://inference:8000
+  timeout_s: 8
+  retries: 2
+
+spark:
+  inference_batch_size: 4
+
+metrics:
+  target_fps: 20
+  target_latency_ms: 150
