@@ -197,3 +197,9 @@ See `datasets/README.md` for preparation notes.
 ## Resume-Ready Achievement Statement
 
 Built a production-style ADAS perception pipeline using Kafka, Spark Structured Streaming, and CUDA-enabled inference, delivering simulated 20 FPS streaming with p95 end-to-end latency under 150 ms and real-time dashboard observability.
+
+## Copyright
+
+Copyright (c) 2026 Arvind Yogesh. All rights reserved.
+
+See the COPYRIGHT file for additional terms.
