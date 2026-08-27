@@ -139,6 +139,38 @@ Target profile:
 - ~20 FPS
 - p95 latency < 150 ms (simulated environment acceptable)
 
+## Benchmark (real, reproducible numbers)
+
+`scripts/benchmark_inference.py` is a self-contained, reproducible benchmark that measures the
+project's two detector architectures (Faster R-CNN baseline vs. the SSDLite MobileNetV3 model
+`inference_service/app.py` actually serves) on real photographs, and writes the raw numbers to
+`report/benchmark_results.json` plus the figures used in `report/report.tex`. It requires
+`torch`, `torchvision`, `opencv-python-headless`, `matplotlib`, and (for the qualitative overlay
+only) `ultralytics`.
+
+```bash
+pip install torch torchvision opencv-python-headless matplotlib ultralytics
+python scripts/benchmark_inference.py
+```
+
+Measured on a 4-vCPU CPU-only container (no GPU, `download.pytorch.org` blocked by network
+policy, so both architectures ran with `weights=None` — see the script docstring and
+`report/report.tex` Section 3 for why that does not affect latency validity):
+
+| Metric | Faster R-CNN (baseline) | SSDLite MobileNetV3 (optimized) |
+|---|---|---|
+| Single-frame p50 latency | 1260.1 ms | 63.5 ms |
+| Single-frame p95 latency | 1284.2 ms | 67.4 ms |
+| Average throughput | 0.79 FPS | 15.8 FPS |
+| Batch p50 latency (4 frames) | 6359.6 ms | 235.8 ms |
+| Batch p95 latency (4 frames) | 7693.1 ms | 271.3 ms |
+
+On this CPU-only host, single-frame latency clears the 150 ms target comfortably, but batch p95
+and average throughput fall short of the ~20 FPS / <150 ms targets — the gap is explained in the
+report's Discussion section and is expected to close on the CUDA path this service is written for.
+Re-run the script on a GPU host to validate that directly; don't take the CPU numbers as a GPU
+proxy.
+
 ## Precision / Recall Evaluation
 
 1. Export predictions from `detections` Kafka stream to `predictions.jsonl`.
@@ -196,7 +228,7 @@ See `datasets/README.md` for preparation notes.
 
 ## Resume-Ready Achievement Statement
 
-Built a production-style ADAS perception pipeline using Kafka, Spark Structured Streaming, and CUDA-enabled inference, delivering simulated 20 FPS streaming with p95 end-to-end latency under 150 ms and real-time dashboard observability.
+Built a production-style ADAS perception pipeline using Kafka, Spark Structured Streaming, and CUDA-ready inference; benchmarked two detector architectures end-to-end and measured a ~20x latency/throughput improvement (1260 ms to 63.5 ms median, 0.8 to 15.8 FPS) from switching to SSDLite MobileNetV3, with real-time dashboard observability. See `report/report.pdf` for the full reproducible benchmark methodology and results.
 
 ## Copyright
 
