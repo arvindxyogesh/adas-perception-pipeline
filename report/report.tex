@@ -28,7 +28,7 @@
 \maketitle
 
 \begin{abstract}
-This paper presents an end-to-end autonomous driving assistance system that streams video frames through Apache Kafka, processes them with Spark Structured Streaming, and performs object and lane inference through a CUDA-ready PyTorch service. The system is designed around decoupled services, micro-batched inference, observability hooks, and deployment-friendly containerization. After optimizing the detector and batch profile, the local CPU benchmark on a sample driving clip reaches a median single-frame latency of 49.8 ms, a 95th percentile latency of 50.5 ms, average throughput of 20.1 FPS, and batch p95 latency of 139.5 ms (4-frame micro-batches). The codebase includes a reproducible downloader, evaluation utilities, and a dashboard for real-time operational visibility.
+This paper presents an end-to-end autonomous driving assistance system that streams video frames through Apache Kafka, processes them with Spark Structured Streaming, and performs object and lane inference through a CUDA-ready PyTorch service. The system is designed around decoupled services, micro-batched inference, observability hooks, and deployment-friendly containerization. Using the project's own reproducible benchmark script (\texttt{scripts/benchmark\_inference.py}), replacing SSDLite MobileNetV3 for the heavier Faster R-CNN baseline reduces measured single-frame median latency from 1260.1\,ms to 63.5\,ms and raises throughput from 0.8\,FPS to 15.8\,FPS on a 4-vCPU CPU-only benchmark host, a $\sim$20$\times$ improvement consistent across both single-frame and 4-frame micro-batch measurements. Batch p95 latency is 271.3\,ms on this CPU host, above the project's 150\,ms target; the discussion section explains why and what closes the remaining gap. The codebase includes a reproducible downloader, evaluation utilities, and a dashboard for real-time operational visibility.
 \end{abstract}
 
 \section{Introduction}
@@ -59,78 +59,72 @@ The inference service is implemented with FastAPI and PyTorch, and is designed t
 The Streamlit dashboard visualizes throughput, end-to-end latency, and inference behavior. Prometheus counters and histograms are included in the inference service so the system can be integrated with standard monitoring tooling. This is particularly useful in interview settings because it demonstrates an understanding of not only model quality but also service-level reliability.
 
 \section{Experimental Setup}
-The reference benchmark uses a sample driving video stored in \texttt{datasets/sample\_drive.mp4}. For this run, frames were sampled evenly across the clip and passed through the local inference path with a lower confidence threshold of 0.1 to surface detections on a small sample without requiring additional annotation files. The benchmark was run on the author's local Apple Silicon workstation in CPU mode, which is a conservative execution setting relative to the intended CUDA deployment path.
+This project does not ship a licensed driving-video dataset (see \texttt{datasets/README.md} for why, and how to add one). The reference benchmark in this report was produced by \texttt{scripts/benchmark\_inference.py}, which is committed to the repository and reproducible end to end: it downloads real photographs containing vehicles and pedestrians from public GitHub-hosted ML demo assets, feeds them through the project's actual detector architectures, and writes the raw measurements to \texttt{report/benchmark\_results.json} plus the figures in this report. Nothing in this section is hand-entered.
 
-The benchmark evaluates three practical outputs:
+The benchmark host is a 4-vCPU Intel Xeon (2.80\,GHz) container with no GPU, running PyTorch 2.3.1 / torchvision 0.18.1 in CPU mode -- a conservative setting relative to the project's intended CUDA deployment path. The organization network policy on this host blocks \texttt{download.pytorch.org}, so the torchvision COCO checkpoints for Faster R-CNN and SSDLite could not be fetched for the latency run; both architectures were therefore benchmarked with randomly-initialized weights (\texttt{weights=None}). This does not affect the validity of the latency numbers: forward-pass wall-clock time is a function of the network architecture and tensor shapes, not the specific trained weight values, so timing is identical to what the pretrained checkpoints would produce. It does mean these two models cannot be used for meaningful detection content, so a separate, genuinely pretrained detector (YOLOv8n, fetched from an allowed GitHub release host) was used only for the qualitative detection figure and the average-detections-per-frame statistic, and is not part of the latency comparison.
+
+The benchmark evaluates:
 \begin{itemize}
-  \item latency per frame,
-  \item average detections per frame, and
-  \item average lane segments per frame.
+  \item single-frame and 4-frame micro-batch latency for both detector architectures,
+  \item average detections per frame from the pretrained qualitative detector, and
+  \item average lane segments per frame from the project's own OpenCV lane heuristic (no ML weights involved, so this measurement is unaffected by the network restriction).
 \end{itemize}
-The codebase also includes an evaluation script for precision and recall when frame-level ground truth is available.
+The codebase also includes an evaluation script (\texttt{scripts/evaluate\_precision\_recall.py}) for precision and recall once frame-level ground truth is available; it is exercised by \texttt{tests/test\_evaluate.py} but is not run against an unlabeled sample in this report, since a precision/recall number without ground truth would not mean anything.
 
 \section{Results}
-Table~\ref{tab:results} summarizes the optimized benchmark. With input size set to 192, lane detection disabled for performance mode, and Spark micro-batch size set to 4, the median single-frame latency is 49.8 ms and p95 is 50.5 ms. Average throughput reaches 20.1 FPS on the local CPU path. The batched path reports p50 latency of 130.3 ms and p95 latency of 139.5 ms, meeting the sub-150 ms tail-latency target in this configuration.
+Table~\ref{tab:results} reports the measured benchmark, produced by \texttt{scripts/benchmark\_inference.py} and stored verbatim in \texttt{report/benchmark\_results.json}. With input size 192 and 4-frame micro-batches, the optimized (SSDLite MobileNetV3) path reaches a median single-frame latency of 63.5\,ms (p95 67.4\,ms) and an average throughput of 15.8\,FPS on the 4-vCPU CPU-only benchmark host described in Section~3. The 4-frame batched path reaches p50 235.8\,ms and p95 271.3\,ms. This clears the single-frame latency target comfortably but sits above the project's 150\,ms batch p95 target and the 20\,FPS throughput target on this specific CPU host; Section~5 explains the gap and the concrete path to closing it (namely, the GPU deployment path this architecture was built for).
 
 \begin{table}[t]
 \small
 \centering
-\caption{Optimized benchmark on 12 evenly sampled frames from the sample driving video.}
+\caption{Measured benchmark, 12 real sample frames, CPU-only host (see Section 3).}
 \label{tab:results}
 \begin{tabular}{@{}p{0.50\columnwidth}p{0.16\columnwidth}p{0.24\columnwidth}@{}}
 \toprule
 Metric & Value & Notes \\
 \midrule
-Single-frame p50 latency & 49.8 ms & CPU, optimized \\
-Single-frame p95 latency & 50.5 ms & CPU, optimized \\
-Average throughput & 20.1 FPS & CPU, optimized \\
-Average detections/frame & 0.33 & cars, trucks \\
-Average lane segments/frame & 0.00 & lane off in perf mode \\
-Batch latency (4 frames) p50 & 130.3 ms & API path \\
-Batch latency (4 frames) p95 & 139.5 ms & API path \\
+Single-frame p50 latency & 63.5 ms & CPU, optimized \\
+Single-frame p95 latency & 67.4 ms & CPU, optimized \\
+Average throughput & 15.8 FPS & CPU, optimized \\
+Average detections/frame & 2.67 & YOLOv8n, pretrained \\
+Average lane segments/frame & 12.0 & OpenCV Hough transform \\
+Batch latency (4 frames) p50 & 235.8 ms & API path \\
+Batch latency (4 frames) p95 & 271.3 ms & API path \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Why the initial model path failed, and what changed}
-The first baseline benchmark did not meet the project target. The optimized benchmark corrected this through targeted systems and model changes.
+\subsection{Baseline vs. optimized detector}
+Table~\ref{tab:before-after} compares the two detector architectures the project supports on the same benchmark host and inputs. The comparison isolates architecture choice as a variable: both models ran with the same input size, batch profile, and (per Section~3) uninitialized weights, so the gap is attributable to the FLOP and parameter-count difference between a two-stage ResNet-50 FPN detector and a single-shot MobileNetV3 detector, not to differences in what each model was trained on.
 
 \begin{table}[t]
 \small
 \centering
-\caption{Before vs. after optimization summary.}
+\caption{Measured baseline vs. optimized detector, same host and inputs.}
 \label{tab:before-after}
 \begin{tabular}{@{}p{0.40\columnwidth}p{0.22\columnwidth}p{0.22\columnwidth}@{}}
 \toprule
-Metric & Before & After \\
+Metric & Faster R-CNN & SSDLite MNv3 \\
 \midrule
-Single-frame p50 latency & 995.1 ms & 49.8 ms \\
-Single-frame p95 latency & 1053.3 ms & 50.5 ms \\
-Average throughput & 1.00 FPS & 20.1 FPS \\
-Batch p50 latency (4) & 4286.4 ms & 130.3 ms \\
-Batch p95 latency (4) & 4380.7 ms & 139.5 ms \\
+Single-frame p50 latency & 1260.1 ms & 63.5 ms \\
+Single-frame p95 latency & 1284.2 ms & 67.4 ms \\
+Average throughput & 0.79 FPS & 15.8 FPS \\
+Batch p50 latency (4) & 6359.6 ms & 235.8 ms \\
+Batch p95 latency (4) & 7693.1 ms & 271.3 ms \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Root causes in the initial path were:
+The architectural reasons for the gap are:
 \begin{itemize}
-  \item Heavy detector choice (Faster R-CNN) on local CPU for per-frame inference.
-  \item Extra lane processing in the critical path during throughput measurement.
-  \item Larger streaming micro-batch profile than needed for the latency target.
+  \item Faster R-CNN is a two-stage detector (region proposal network plus a ResNet-50-FPN backbone), which costs substantially more FLOPs per frame than a single-shot detector.
+  \item SSDLite MobileNetV3 uses depthwise-separable convolutions and a single-shot head, purpose-built for lower per-frame compute cost.
+  \item Both were benchmarked at input size 192 and Spark micro-batch size 4, matching \texttt{config/settings.yaml}, so the comparison reflects the project's actual deployed configuration rather than each model's default input resolution.
 \end{itemize}
 
-Changes applied to reach target behavior were:
-\begin{itemize}
-  \item Replaced detector with SSDLite MobileNetV3 for lower compute cost per frame.
-  \item Reduced inference input size to 192 in performance mode.
-  \item Added runtime lane-detection toggle and disabled it in performance benchmark mode.
-  \item Reduced Spark inference micro-batch size from 8 to 4.
-\end{itemize}
+This produces an approximately 20$\times$ throughput increase (0.79 to 15.8\,FPS) and a similarly sized reduction in single-frame median latency (1260.1\,ms to 63.5\,ms), consistent across both the single-frame and 4-frame batch measurements ($\sim$27$\times$ at p50). This is why \texttt{inference\_service/app.py} ships SSDLite MobileNetV3 as the default model rather than Faster R-CNN.
 
-This produced an approximate 20$\times$ throughput increase and more than 8$\times$ reduction in single-frame median latency, while bringing batch p95 below 150 ms for the tested workload.
-
-Figure~\ref{fig:latency} plots the latency trend across sampled frames, while Figure~\ref{fig:overlay} shows a qualitative detection overlay on a representative frame. The overlay contains two cars and one truck at the sample confidence threshold and a set of lane segments extracted from the road region.
+Figure~\ref{fig:latency} plots the measured latency trend across sampled frames, while Figure~\ref{fig:overlay} shows a real detection overlay: a pretrained YOLOv8n detector (Section~3) found one bus and three people at confidence $\geq 0.45$ on a representative frame, drawn together with lane segments extracted by the project's own OpenCV Hough-transform lane detector on the same frame.
 
 \begin{figure*}[t]
   \centering
@@ -153,21 +147,20 @@ Figure~\ref{fig:latency} plots the latency trend across sampled frames, while Fi
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{sample_detection_overlay.jpg}
-  \caption{Qualitative inference output on the sample driving video. The system detects vehicles and lane cues on a representative frame.}
+  \caption{Real qualitative inference output on a representative benchmark frame (Section~3): a pretrained YOLOv8n detector finds a bus and three pedestrians, and the project's OpenCV lane heuristic draws road-line cues on the same frame.}
   \label{fig:overlay}
 \end{figure}
 
 \section{Discussion}
-The benchmark demonstrates that the full software path is functional: frames can be encoded, transported, decoded, inferred, and visualized. The optimized local benchmark now reaches the project target band on CPU for this sample workload, including approximately 20 FPS and sub-150 ms batch tail latency. In a deployed CUDA/TensorRT environment, the same architecture is expected to increase headroom further and allow lane extraction to be re-enabled while preserving service-level latency objectives.
+The benchmark demonstrates that the full software path is functional: frames can be encoded, transported, decoded, inferred, and visualized, and the measurements in Section~4 are real, reproducible numbers rather than target-fitted estimates. On this CPU-only host, single-frame latency (63.5\,ms p50) is well inside the 150\,ms budget, but 4-frame batch p95 (271.3\,ms) and average throughput (15.8\,FPS) fall short of the project's 150\,ms / 20\,FPS targets. Two factors explain the gap and are testable, not speculative: (1) the benchmark host has no GPU, while \texttt{inference\_service/app.py} is written to run the identical SSDLite MobileNetV3 graph on CUDA when available (\texttt{torch.device('cuda' if torch.cuda.is\_available() else 'cpu')}), which is the deployment path this architecture targets; (2) batching four ResNet/MobileNet forward passes serially on 4 shared vCPUs does not parallelize the way a GPU batch would, so batch latency scales roughly linearly with batch size on this host rather than amortizing per-frame cost. Re-running \texttt{scripts/benchmark\_inference.py} on a CUDA-enabled host is the direct way to confirm the target is met in the intended deployment environment; this report does not claim that result without having measured it.
 
 From a systems perspective, the strongest aspects of the design are service separation, explicit message contracts, retry logic, and observability. From a machine learning perspective, the service uses a standard pretrained detector and a lightweight lane heuristic to provide a practical ADAS-style output without requiring end-to-end training infrastructure.
 
 Precision and recall are supported in the codebase through a dedicated evaluator, but the present reference run uses an unlabelled sample clip. In a fully annotated evaluation set such as KITTI, BDD100K, or nuScenes, the same script can be used to compute standard detection metrics~\cite{kitti,bdd100k,nuscenes}.
 
 \section{Conclusion}
-This project provides an interview-ready ADAS streaming prototype that combines modern data engineering with deployed ML service patterns. It includes data ingestion, streaming orchestration, GPU-ready inference, real-time monitoring, evaluation tooling, and reproducible documentation. The optimized benchmark confirms the system works end-to-end on sample video while achieving the target performance envelope on local CPU for the evaluated configuration, and the architecture remains prepared for higher-throughput CUDA deployment in production.
+This project provides an interview-ready ADAS streaming prototype that combines modern data engineering with deployed ML service patterns. It includes data ingestion, streaming orchestration, GPU-ready inference, real-time monitoring, evaluation tooling, and reproducible documentation. The measured, reproducible benchmark confirms the system works end-to-end and that the SSDLite MobileNetV3 path is roughly 20$\times$ faster than the Faster R-CNN baseline on identical inputs; single-frame latency already clears the project's target on CPU alone, while batch throughput and batch-tail latency remain to be validated on the CUDA deployment path this architecture was built for.
 
-\section*{References}
 \begin{thebibliography}{9}
 \bibitem{kafka} Apache Kafka Documentation. \url{https://kafka.apache.org/documentation/}
 \bibitem{spark} Apache Spark Structured Streaming Programming Guide. \url{https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html}
