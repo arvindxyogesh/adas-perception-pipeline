@@ -1,67 +1,67 @@
 {
   "environment": {
-    "device": "cpu",
+    "device": "cuda",
     "input_size": 192,
     "batch_size": 4,
     "n_frames": 12,
     "conf_threshold": 0.45,
-    "baseline_pretrained_weights_loaded": false,
-    "optimized_pretrained_weights_loaded": false,
+    "baseline_pretrained_weights_loaded": true,
+    "optimized_pretrained_weights_loaded": true,
     "note": "Frames are real photographs (not synthetic) used as benchmark input; no licensed driving dataset ships with this repo (see datasets/README.md). If pretrained-weight download was blocked in this run, timings above reflect the real production network architecture with randomly-initialized weights, which does not change forward-pass latency."
   },
   "baseline": {
     "tag": "faster_rcnn_resnet50_fpn (baseline)",
     "single_latencies_ms": [
-      1258.8648379999086,
-      1281.0766159999503,
-      1249.787172000083,
-      1224.0697189999992,
-      1261.400634000097,
-      1230.975304000026,
-      1282.1105720000787,
-      1284.16667099998,
-      1249.0889319999496,
-      1270.317144000046,
-      1237.482264999926,
-      1422.2414540000727
+      11.14500593394041,
+      10.247093625366688,
+      9.886594489216805,
+      9.912187233567238,
+      10.006685741245747,
+      9.852063842117786,
+      9.90427564829588,
+      9.957759641110897,
+      9.862791746854782,
+      9.894789196550846,
+      9.993202053010464,
+      9.839891456067562
     ],
     "batch_latencies_ms": [
-      7693.133282999952,
-      6359.575399999926,
-      6278.16342899996
+      75.70117712020874,
+      26.026558130979538,
+      25.891678407788277
     ],
-    "p50_single_ms": 1260.1327360000028,
-    "p95_single_ms": 1284.16667099998,
-    "p50_batch_ms": 6359.575399999926,
-    "p95_batch_ms": 7693.133282999952,
-    "avg_fps": 0.7868036597278625
+    "p50_single_ms": 9.908231440931559,
+    "p95_single_ms": 10.247093625366688,
+    "p50_batch_ms": 26.026558130979538,
+    "p95_batch_ms": 75.70117712020874,
+    "avg_fps": 99.58312792530565
   },
   "optimized": {
     "tag": "ssdlite320_mobilenet_v3_large (optimized)",
     "single_latencies_ms": [
-      58.977239000000736,
-      66.52383100004045,
-      58.62148999995043,
-      63.512533999983134,
-      63.44060200001422,
-      62.049156999933075,
-      59.27042899998014,
-      59.28300800007946,
-      65.80307599995194,
-      68.40768600000047,
-      67.40993199991863,
-      64.4240809999701
+      14.900933019816875,
+      16.975211910903454,
+      14.857822097837925,
+      14.673925936222076,
+      16.97057019919157,
+      14.863069169223309,
+      14.648179523646832,
+      17.767212353646755,
+      14.9022052064538,
+      14.552189037203789,
+      16.979556530714035,
+      14.873398467898369
     ],
     "batch_latencies_ms": [
-      271.2874409999131,
-      235.7854240000279,
-      234.44766499994785
+      110.42395886033773,
+      50.766682252287865,
+      49.28136058151722
     ],
-    "p50_single_ms": 63.47656799999868,
-    "p95_single_ms": 67.40993199991863,
-    "p50_batch_ms": 235.7854240000279,
-    "p95_batch_ms": 271.2874409999131,
-    "avg_fps": 15.836920577312513
+    "p50_single_ms": 14.887165743857622,
+    "p95_single_ms": 16.979556530714035,
+    "p50_batch_ms": 50.766682252287865,
+    "p95_batch_ms": 110.42395886033773,
+    "avg_fps": 64.18338529811206
   },
   "qualitative_detection": {
     "available": true,

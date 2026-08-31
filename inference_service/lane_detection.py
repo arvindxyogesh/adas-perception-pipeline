@@ -27,7 +27,7 @@ def detect_lanes(frame_bgr: np.ndarray) -> List[Dict[str, float]]:
         return lane_lines
 
     for line in lines[:12]:
-        x1, y1, x2, y2 = line[0]
+        x1, y1, x2, y2 = np.asarray(line).reshape(-1)[:4]
         lane_lines.append(
             {
                 'x1': float(x1),
